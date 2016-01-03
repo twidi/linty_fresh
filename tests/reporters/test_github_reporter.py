@@ -6,7 +6,7 @@ import unittest
 from mock import MagicMock, call, patch
 
 from linty_fresh.reporters import github_reporter
-from linty_fresh.reporters.github_reporter import GithubReporter, MAX_LINT_ERROR_REPORTS
+from linty_fresh.reporters.github_reporter import GithubReporter
 from linty_fresh.problem import Problem
 from ..utils.fake_client_session import FakeClientResponse, FakeClientSession
 
@@ -145,7 +145,7 @@ class GithubReporterTest(unittest.TestCase):
 
         reporter = github_reporter.create_reporter(mock_args)
 
-        problems_count = MAX_LINT_ERROR_REPORTS + 2
+        problems_count = reporter.max_error_reports + 2
 
         problems = [Problem('another_file', x, 'Wat') for x in range(1, problems_count+1)]
 
@@ -157,8 +157,8 @@ class GithubReporterTest(unittest.TestCase):
         self.assertEqual(result,(
             'GithubReporter',
             problems_count,
-            MAX_LINT_ERROR_REPORTS + 1,  # max + "Too many lint errors"
-            MAX_LINT_ERROR_REPORTS,
+            reporter.max_error_reports + 1,  # max + "Too many lint errors"
+            reporter.max_error_reports,
             0,
         ))
 
@@ -178,7 +178,7 @@ class GithubReporterTest(unittest.TestCase):
         )
 
         self.assertIn(overflow_call, fake_client_session.calls)
-        self.assertEqual(3 + github_reporter.MAX_LINT_ERROR_REPORTS,
+        self.assertEqual(3 + reporter.max_error_reports,
                          len(fake_client_session.calls))
 
     @patch('linty_fresh.reporters.github_reporter.aiohttp.ClientSession')
@@ -244,13 +244,15 @@ class GithubReporterTest(unittest.TestCase):
         mock_args = MagicMock()
         mock_args.pr_url = 'https://github.com/foo/bar/pull/%d' % pr_id
         mock_args.commit = 'abc123'
+        mock_args.github_max_reports = github_reporter.DEFAULT_MAX_ERROR_REPORTS
         mock_getenv.return_value = 'MY_TOKEN'
         mock_client_session.side_effect = session_init_side_effect
 
         return mock_args, fake_client_session
 
     def test_create_line_map(self):
-        reporter = GithubReporter('TOKEN', 'foo', 'bar', 12, 'abc123')
+        reporter = GithubReporter('TOKEN', 'foo', 'bar', 12, 'abc123',
+                                  github_reporter.DEFAULT_MAX_ERROR_REPORTS)
         client_session = FakeClientSession(url_map={
             ('https://api.github.com/repos/foo/bar/pulls/12', 'get'):
                 FakeClientResponse(GithubReporterTest.github_patch)
@@ -269,7 +271,8 @@ class GithubReporterTest(unittest.TestCase):
         self.assertEqual(12, line_map['some_dir/some_file'][59])
 
     def test_messages_paging(self):
-        reporter = GithubReporter('TOKEN', 'foo', 'bar', 12, 'abc123')
+        reporter = GithubReporter('TOKEN', 'foo', 'bar', 12, 'abc123',
+                                  github_reporter.DEFAULT_MAX_ERROR_REPORTS)
         client_session = FakeClientSession(url_map={
             ('https://api.github.com/repos/foo/bar/pulls/12/comments', 'get'):
                 FakeClientResponse(json.dumps([{
