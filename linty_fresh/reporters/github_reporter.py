@@ -54,6 +54,7 @@ class GithubReporter(object):
             (line_map, existing_messages) = yield from asyncio.gather(
                 self.create_line_to_position_map(client_session),
                 self.get_existing_messages(client_session))
+            total_lint_errors = 0
             lint_errors = 0
             review_comment_awaitable = []
             pr_url = self._get_pr_url()
@@ -69,6 +70,7 @@ class GithubReporter(object):
                 line_number = location[1]
                 position = line_map.get(path, {}).get(line_number, None)
                 if position is not None:
+                    total_lint_errors += 1
                     message = '\n'.join(message_for_line)
                     if (path, position, message) not in existing_messages:
                         lint_errors += 1
@@ -81,6 +83,8 @@ class GithubReporter(object):
                             }, sort_keys=True)
                             review_comment_awaitable.append(
                                 client_session.post(pr_url, data=data))
+            if not total_lint_errors:
+                return ()
             if lint_errors > MAX_LINT_ERROR_REPORTS:
                 message = ''':sparkles:Linty Fresh Says:sparkles::
 
@@ -99,6 +103,21 @@ Only reporting the first {1}.'''.format(
 
             for response in responses:
                 response.close()
+
+            return (
+                # Reporter name
+                self.__class__.__name__,
+                # Number of line with problem(s)
+                total_lint_errors,
+                # Number not already present on github
+                len(responses),
+                # Overflow ?
+                (MAX_LINT_ERROR_REPORTS
+                    if lint_errors > MAX_LINT_ERROR_REPORTS else None),
+                # Number that cannot be pushed on github
+                len([response for response
+                     in responses if response.status != 201]),
+            )
 
     @asyncio.coroutine
     def create_line_to_position_map(
