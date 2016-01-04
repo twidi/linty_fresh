@@ -20,7 +20,7 @@ class GithubReporterTest(unittest.TestCase):
             @@ -38,3 +38,4 @@ 37 - 0
              38 - 1
              39 - 2
-             40 - 3
+            +40 - 3
             -DELETED - 4
             -DELETED - 5
             -DELETED - 6
